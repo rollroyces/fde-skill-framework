@@ -1,9 +1,79 @@
 # FDE Skill Framework
 
-A production-grade Forward Deployed Engineer (FDE) skill for Hermes. Enforces
-a four-phase loop — **Discovery → Architecture → Build → ROI Evaluation** —
-with hard gates at each transition so engineering work always ties back to a
-named customer, a measurable business metric, and a contracted SLA.
+> A production-grade **Forward Deployed Engineer (FDE)** skill for Hermes.
+> Enforces a four-phase loop — **Discovery → Architecture → Build → ROI
+> Evaluation** — with hard gates at each transition so engineering work
+> always ties back to a named customer, a measurable business metric, and a
+> contracted SLA.
+
+<p align="center">
+  <img src="docs/hero.png" alt="FDE workflow: Discovery → Architecture → Build → ROI" width="900">
+</p>
+
+## Why this exists
+
+An FDE ships working code into a customer environment that closes a
+measurable business gap. Without a loop, FDE work drifts into one of three
+failure modes: **hero-mode coding** (build first, justify later),
+**demo-ware** (polished demos that collapse on real data), or **vanity
+metrics** ("we process 1M events/day" with no business outcome behind it).
+This framework refuses to write code until a named customer, a metric M, a
+baseline, a target, and an SLA are on paper — and it scores the engagement
+against those numbers after every ship.
+
+## The loop, in one diagram
+
+```mermaid
+flowchart LR
+    D["<b>Discovery</b><br/>Sponsor · M · baseline · target<br/>SLA · constraints"] -->|sign-off| A["<b>Architecture</b><br/>Solution brief · system sketch<br/>risk register"]
+    A -->|acknowledge| B["<b>Build</b><br/>Vertical slice in customer env<br/>instrument · demo"]
+    B -->|ship| R["<b>ROI Evaluation</b><br/>Δ M · SLA · cost"]
+    R -->|"scale · iterate · cut"| D
+
+    style D fill:#0f172a,stroke:#22d3ee,color:#f8fafc
+    style A fill:#0f172a,stroke:#34d399,color:#f8fafc
+    style B fill:#0f172a,stroke:#fbbf24,color:#f8fafc
+    style R fill:#0f172a,stroke:#fb7185,color:#f8fafc
+```
+
+Every phase has an exit gate. **Build** never starts until **Discovery** is
+signed. **ROI Evaluation** is appended to the engagement log after every
+meaningful ship — not at the end. The four decision criteria are fixed and
+shared with the sponsor before any code is written.
+
+## The four-axis scorecard
+
+The evaluator (`tests/test_fde_eval.py`) scores an engagement on four
+weighted axes. The same function backs both the test harness and the CLI —
+scores cannot drift between them.
+
+| Axis              | Weight | What it catches                                              |
+|-------------------|--------|--------------------------------------------------------------|
+| **Business**      | 35%    | Was Discovery done? Are metric, baseline, target, ROI sourced? |
+| **SLA compliance**| 30%    | p99 latency, error rate, availability vs contracted targets post-GA |
+| **Latency trend** | 15%    | Is p99 stable or improving over the post-GA weeks?           |
+| **API error rate**| 20%    | Mean error rate vs the customer's error budget               |
+
+### Live demo
+
+The `watch` subcommand re-scores on every file change. Here's a 6-second
+loop showing three real scorecards from the bundled fixtures:
+
+<p align="center">
+  <img src="docs/fde-watch-demo.gif" alt="fde watch demo: SCALE, CUT, SCALE" width="880">
+</p>
+
+What you just saw:
+
+1. **SCALE 100/100** — `acme-2026-09-16`. Discovery complete, zero SLA
+   breaches, latency improving. Expand to next workflow.
+2. **CUT 7.5/100** — `broken-2026-09-16`. Discovery gaps (sponsor,
+   metric, baseline, target, ROI all missing). Wind down cleanly, write up
+   lessons, hand off what shipped.
+3. **SCALE 96.4/100** — same engagement re-scored after week 5 of post-GA
+   data. SLA score dropped slightly on a single availability breach, but
+   decision holds. This is the `watch` loop in action — no JSON crafting,
+   the file changes, the scorecard updates.
 
 ## What's in this repo
 
@@ -17,12 +87,65 @@ named customer, a measurable business metric, and a contracted SLA.
 │   ├── __init__.py                  #   subcommands: score, init, log-week, watch
 │   └── __main__.py                  #   entry point for `python -m fde`
 ├── references/
-│   └── business-discovery-template.md  # Stakeholder interview template (used in Discovery phase)
+│   └── business-discovery-template.md  # Stakeholder interview template
 ├── tests/
-│   ├── test_fde_eval.py            # Black-box evaluator: scores an engagement log on 4 axes
+│   ├── test_fde_eval.py            # Black-box evaluator (4 axes, weighted)
 │   └── test_cli.py                  # CLI smoke tests — guarantee CLI uses same evaluator
+├── docs/
+│   ├── hero.png                     # This README's hero diagram (2x retina)
+│   ├── hero.svg                     # Vector version for viewports that prefer SVG
+│   └── fde-watch-demo.gif           # Animated terminal demo
 └── README.md                        # This file
 ```
+
+## Install into Hermes
+
+The skill auto-loads from `.hermes/skills/` and the project config from
+`.hermes.md` when you're in this repo. Two install options:
+
+### A. Per-repo install (recommended)
+
+Already in place at the right paths. From the Hermes desktop app or CLI:
+
+```bash
+hermes skills list
+# You should see: fde-workflow
+
+hermes status
+# Should print the metrics from .hermes.md
+```
+
+### B. Global install
+
+```bash
+mkdir -p ~/.hermes/skills
+cp .hermes/skills/fde-workflow.md ~/.hermes/skills/
+cp -r references ~/                              # global discovery template
+```
+
+> **Note.** The per-repo version is preferred — `.hermes.md` and the
+> references are project-specific (your SLA targets, your constraints).
+> The skill file (`fde-workflow.md`) is generic and safe to globalize.
+
+## Use the loop
+
+In any Hermes session in this project:
+
+```
+/skill fde-workflow
+```
+
+Hermes will refuse to write code until the Discovery gate is met. Follow
+the checklist:
+
+1. Open `references/business-discovery-template.md` and fill it out **with**
+   the sponsor. Don't paraphrase, don't guess — "TBD" is a blocker.
+2. Once signed, copy the Discovery block into
+   `engagements/<customer>-<date>.md`.
+3. Draft the 1-page solution brief, send it to the sponsor before code.
+4. Build a vertical slice in the customer's environment first. No mocks
+   across the trust boundary.
+5. Run ROI scoring via the harness after every meaningful ship.
 
 ## Use the CLI
 
@@ -50,73 +173,7 @@ python -m fde watch engagements/globex-2026-09-16.log.json --once --strict
 python -m fde watch engagements/globex-2026-09-16.log.json --interval 1.0
 ```
 
-The CLI reuses the harness's `evaluate()` directly — see
-`fde/__init__.py` (`sys.path` bootstrap + `import test_fde_eval as _harness`)
-and the matching tests in `tests/test_cli.py`.
-
-## Install into Hermes
-
-The skill is designed to be loaded by Hermes from a local checkout. Two
-options:
-
-### A. Per-repo install (recommended)
-
-The files already live at the right paths inside this repo. From the Hermes
-desktop app or CLI in this project, the skill auto-loads from `.hermes/skills/`
-and the project config from `.hermes.md`.
-
-```bash
-# Inside this repo
-hermes skills list
-# You should see: fde-workflow
-
-hermes status
-# Should print the metrics from .hermes.md
-```
-
-### B. Global install
-
-Copy the skill into your global Hermes skills directory so it's available in
-every project:
-
-```bash
-mkdir -p ~/.hermes/skills
-cp .hermes/skills/fde-workflow.md ~/.hermes/skills/
-cp .hermes.md ~/                                # optional global defaults
-cp -r references ~/                              # global discovery template
-```
-
-> **Note.** The per-repo version is preferred — `.hermes.md` and the
-> references are project-specific (your SLA targets, your constraints). The
-> skill file (`fde-workflow.md`) is generic and safe to globalize.
-
-## Use the loop
-
-In any Hermes session in this project, invoke the FDE skill explicitly when
-the work is FDE-shaped (named customer, external delivery, contract SLA):
-
-```
-/skill fde-workflow
-```
-
-Hermes will refuse to write code until the Discovery gate is met. Follow the
-checklist:
-
-1. Open `references/business-discovery-template.md` and fill it out **with**
-   the sponsor. Don't paraphrase, don't guess.
-2. Once signed, copy the Discovery block into
-   `engagements/<customer>-<date>.md`.
-3. Draft the 1-page solution brief, then send it to the sponsor before
-   touching code.
-4. Build a vertical slice in the customer's environment first. No mocks
-   across the trust boundary.
-5. Run ROI scoring via the harness after every meaningful ship.
-
-## Run the evaluation harness
-
-The harness scores an engagement log against the contract defined in
-`.hermes.md`. It is a black-box evaluator — feed it a JSON file and it
-returns a 0-100 score and a `scale | iterate | cut` decision.
+## Run the tests
 
 ```bash
 # Run the bundled fixtures (smoke test + sample output)
@@ -132,15 +189,6 @@ python -m fde score path/to/engagement.json
 Expected JSON shape for an engagement log is documented at the top of
 `tests/test_fde_eval.py`.
 
-### What the four axes measure
-
-| Axis              | Weight | What it catches                                              |
-|-------------------|--------|--------------------------------------------------------------|
-| Business criteria | 35%    | Was Discovery done? Are metric, baseline, target, ROI sourced? |
-| SLA compliance    | 30%    | p99, error rate, availability vs contracted targets post-GA  |
-| Latency trend     | 15%    | Is p99 stable or improving over the post-GA weeks?            |
-| API error rate    | 20%    | Mean error rate vs the customer's error budget               |
-
 ### Decision rule
 
 - **Scale** (overall ≥ 85, business ≥ 90): hit the target, ROI positive →
@@ -150,17 +198,43 @@ Expected JSON shape for an engagement log is documented at the top of
 - **Cut** (overall < 50, or business < 60): ROI negative or blocked →
   wind down cleanly.
 
-The harness exits non-zero if the smoke test fails, so wire it into CI:
+## Tech stack contract
 
-```yaml
-# .github/workflows/fde-eval.yml
-- run: python tests/test_fde_eval.py tests/fixtures/most_recent.json
-```
+Hard constraints, fully detailed in `.hermes.md`. Headlines:
+
+- **Languages.** Python 3.11+ or TypeScript 5+. Bash only for build/test
+  glue (<200 lines, no business logic).
+- **Frameworks.** FastAPI / Express / React. No new framework introductions
+  inside an engagement without sponsor sign-off.
+- **Data.** Customer data never leaves the customer's cloud or agreed
+  region. PII tagged at ingest; downstream services refuse untagged data.
+- **Secrets.** Customer's KMS / Vault only. No long-lived static creds.
+  Service accounts scoped, rotated ≤90d.
+- **Observability.** OpenTelemetry + Prometheus baseline. Every
+  customer-facing endpoint emits request id, customer id, latency, result,
+  error class.
+- **Vendors.** Every external API needs a documented vendor SLA, a
+  data-processing agreement, and a tested circuit breaker — *before* the
+  first call.
+
+## Anti-patterns the framework blocks
+
+- **Hero-mode coding** — building before metric, baseline, SLA exist.
+- **Demo-ware** — polished demos against sanitized toy data that collapse
+  on the customer's real data.
+- **Shadow IT** — deploying into the customer's cloud without their
+  security reviewer's written approval.
+- **Vanity metrics** — "we process 1M events/day" with no business
+  outcome behind it.
+- **Promising ROI you can't measure** — if you can't draw the
+  measurement pipeline, don't put a number in the slide.
+
+Full list in `.hermes/skills/fde-workflow.md` § Anti-patterns.
 
 ## Contributing
 
-This framework is opinionated. Changes that loosen a gate, soften an
-anti-pattern, or remove a hard constraint need:
+Changes that loosen a gate, soften an anti-pattern, or remove a hard
+constraint need:
 
 1. A one-paragraph rationale in the PR description.
 2. Sign-off from at least one FDE lead.

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 220" role="img" aria-label="FDE Workflow: Discovery, Architecture, Build, ROI Evaluation">
+  <defs>
+    <style>
+      .mono { font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace; }
+      .title { font-size: 14px; fill: #e2e8f0; letter-spacing: 0.08em; text-transform: uppercase; }
+      .phase { font-size: 18px; fill: #f8fafc; font-weight: 600; }
+      .sub { font-size: 10px; fill: #94a3b8; }
+      .gate { font-size: 9px; fill: #fbbf24; letter-spacing: 0.04em; }
+      .verdict { font-size: 9px; fill: #34d399; letter-spacing: 0.04em; }
+    </style>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+    </marker>
+    <linearGradient id="gradDiscover" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0.55"/>
+    </linearGradient>
+    <linearGradient id="gradArch" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#34d399" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#34d399" stop-opacity="0.55"/>
+    </linearGradient>
+    <linearGradient id="gradBuild" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#fbbf24" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#fbbf24" stop-opacity="0.55"/>
+    </linearGradient>
+    <linearGradient id="gradROI" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#fb7185" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#fb7185" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="960" height="220" fill="#020617"/>
+  <g opacity="0.35">
+    <pattern id="g" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <rect width="960" height="220" fill="url(#g)"/>
+  </g>
+
+  <text class="mono title" x="32" y="40">FDE Workflow · Discovery → Architecture → Build → ROI</text>
+  <text class="mono sub" x="32" y="58">No code ships until a named customer, metric M, baseline, and target are on paper.</text>
+
+  <!-- Four phase cards -->
+  <!-- Discovery -->
+  <g transform="translate(32,90)">
+    <rect width="200" height="80" rx="8" fill="#0f172a" stroke="url(#gradDiscover)" stroke-width="1.5"/>
+    <text class="mono phase" x="16" y="28">Discovery</text>
+    <text class="mono sub" x="16" y="46">Sponsor · M · baseline</text>
+    <text class="mono sub" x="16" y="60">target · SLA · constraints</text>
+    <text class="mono gate" x="16" y="74">▸ GATE: stakeholder sign-off</text>
+  </g>
+  <line x1="232" y1="130" x2="266" y2="130" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Architecture -->
+  <g transform="translate(266,90)">
+    <rect width="200" height="80" rx="8" fill="#0f172a" stroke="url(#gradArch)" stroke-width="1.5"/>
+    <text class="mono phase" x="16" y="28">Architecture</text>
+    <text class="mono sub" x="16" y="46">Solution brief · system</text>
+    <text class="mono sub" x="16" y="60">sketch · risk register</text>
+    <text class="mono gate" x="16" y="74">▸ GATE: sponsor acknowledges</text>
+  </g>
+  <line x1="466" y1="130" x2="500" y2="130" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Build -->
+  <g transform="translate(500,90)">
+    <rect width="200" height="80" rx="8" fill="#0f172a" stroke="url(#gradBuild)" stroke-width="1.5"/>
+    <text class="mono phase" x="16" y="28">Build</text>
+    <text class="mono sub" x="16" y="46">Vertical slice in customer</text>
+    <text class="mono sub" x="16" y="60">env · instrument · demo</text>
+    <text class="mono gate" x="16" y="74">▸ GATE: baseline-vs-now delta</text>
+  </g>
+  <line x1="700" y1="130" x2="734" y2="130" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ROI -->
+  <g transform="translate(734,90)">
+    <rect width="194" height="80" rx="8" fill="#0f172a" stroke="url(#gradROI)" stroke-width="1.5"/>
+    <text class="mono phase" x="16" y="28">ROI Evaluation</text>
+    <text class="mono sub" x="16" y="46">Δ M · SLA · cost</text>
+    <text class="mono verdict" x="16" y="74">SCALE · ITERATE · CUT</text>
+  </g>
+
+  <!-- Loop arrow back to discovery -->
+  <path d="M 831 170 Q 831 200 480 200 Q 132 200 132 170" fill="none" stroke="#475569" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+  <text class="mono sub" x="430" y="195" text-anchor="middle" fill="#94a3b8">every ship re-enters Discovery</text>
+</svg>
