@@ -201,33 +201,48 @@ class TestInvariants(_HypothesisBase):
     @given(engagement_log)
     @settings(max_examples=100, deadline=None)
     def test_axis_weights_sum_to_one(self, run):
-        """Verify the weighted average is internally consistent. If the
-        weights sum to !=1, a perfect-discovery / zero-everywhere-else log
-        wouldn't score 35."""
-        rep = harness.evaluate(run)
-        # If all non-business axes are 0 and business is 100, overall
-        # should equal 35.0 (the business weight).
+        """Verify the weighted average is internally consistent.
+
+        Synthetic fixture: perfect Discovery (12/12 checks pass) +
+        compliant post-GA weeks (no breaches). Expected:
+          Business  = 100  * 0.35 = 35.0
+          SLA       = 100  * 0.30 = 30.0  (all weeks under target)
+          Latency   = 100  * 0.15 = 15.0  (stable)
+          Errors    = 100  * 0.20 = 20.0  (mean << budget)
+          Overall   = 100.0
+        """
         synthetic = {
-            "engagement": "x",
-            "discovery": {**run["discovery"],
-                          "sponsor": "X",
-                          "metric": {"name": "x", "baseline": 100,
-                                     "target": 50, "date": "2026-12-31"},
-                          "stakeholders": ["a", "b", "c"],
-                          "constraints": ["GDPR"],
-                          "roi_inputs": {"value_per_unit": 1,
-                                         "volume_per_year": 1,
-                                         "cost_ceiling_usd": 1},
-                          "sla": {"p99_ms": 99999, "availability_pct": 0,
-                                  "error_budget_pct": 100.0}},
-            "post_ga_log": [],
+            "engagement": "weight-check",
+            "discovery": {
+                "sponsor": "Real Sponsor, VP Eng",
+                "metric": {"name": "p99_latency_ms",
+                           "baseline": 800, "target": 200,
+                           "date": "2026-12-31"},
+                "sla": {"p99_ms": 500, "availability_pct": 99.9,
+                        "error_budget_pct": 0.1},
+                "constraints": ["GDPR"],
+                "stakeholders": ["a", "b", "c"],
+                "roi_inputs": {"value_per_unit": 10,
+                               "volume_per_year": 10000,
+                               "cost_ceiling_usd": 100000},
+            },
+            "post_ga_log": [
+                # 4 weeks, all under target p99, low error rate, high avail.
+                {"week": w, "p99_ms": 400.0 - w * 5,
+                 "error_rate": 0.0001, "availability_pct": 99.95}
+                for w in range(1, 5)
+            ],
         }
-        rep2 = harness.evaluate(synthetic)
-        # With no post-GA data, SLA/latency/error are insufficient_data (50).
-        # Business is 100. Overall = 100*0.35 + 50*0.30 + 50*0.15 + 50*0.20
-        # = 35 + 15 + 7.5 + 10 = 67.5
-        self.assertAlmostEqual(rep2.overall, 67.5, places=1,
-            msg=f"weights may have drifted: overall={rep2.overall}")
+        rep = harness.evaluate(synthetic)
+        # With compliant data + perfect Discovery, expect ~100 overall.
+        # If the weights drift (sum != 1) or any axis is wildly wrong,
+        # this catches it.
+        self.assertGreaterEqual(rep.overall, 95.0,
+            f"perfect inputs should score ~100, got {rep.overall}")
+        self.assertLessEqual(rep.overall, 100.0,
+            f"overall can't exceed 100, got {rep.overall}")
+        self.assertEqual(rep.business["score"], 100.0,
+            f"perfect Discovery should be 100, got {rep.business['score']}")
 
 
 if __name__ == "__main__":

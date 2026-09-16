@@ -135,11 +135,23 @@ def score_business(run: dict) -> dict:
 # Axis 2: SLA compliance (p99, error rate, availability vs target)
 # --------------------------------------------------------------------------- #
 
+def _safe_num(d, key, default):
+    """Return d[key] if it's a real number, else default. Guards against
+    both missing keys AND keys explicitly set to None — both must fall back
+    to the default, otherwise downstream math (>, /, <) crashes."""
+    v = d.get(key, default)
+    if v is None:
+        return default
+    if not _is_number(v):
+        return default
+    return v
+
+
 def score_sla(run: dict, sla: dict) -> dict:
     """Compare post-GA measurements against the declared SLA."""
-    target_p99 = sla.get("p99_ms")
-    target_err = sla.get("error_budget_pct", 0.1) / 100.0
-    target_avail = sla.get("availability_pct", 99.9)
+    target_p99 = _safe_num(sla, "p99_ms", None)
+    target_err = (_safe_num(sla, "error_budget_pct", 0.1)) / 100.0
+    target_avail = _safe_num(sla, "availability_pct", 99.9)
 
     log = run.get("post_ga_log", [])
     if not log:
@@ -249,7 +261,7 @@ def score_error_rate(run: dict, sla: dict) -> dict:
     if not rates:
         return {"score": 0.0, "reason": "no error_rate measurements"}
 
-    budget = sla.get("error_budget_pct", 0.1) / 100.0
+    budget = _safe_num(sla, "error_budget_pct", 0.1) / 100.0
     mean_rate = sum(rates) / len(rates)
     ceiling = budget * 0.5  # operating well under the budget
     over_budget = sum(1 for r in rates if r > budget)
