@@ -1,0 +1,49 @@
+name: fde-score
+
+on:
+  pull_request:
+    paths:
+      - "engagements/**"
+
+jobs:
+  score:
+    name: Score engagement logs
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Discover engagement logs
+        id: discover
+        run: |
+          {
+            echo "logs<<EOF"
+            find engagements -name '*.log.json' 2>/dev/null || true
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Run fde score on each log
+        if: steps.discover.outputs.logs != ''
+        run: |
+          set -e
+          mkdir -p /tmp/fde-out
+          echo "## FDE Scorecard" > /tmp/fde-out/scorecard.md
+          echo "" >> /tmp/fde-out/scorecard.md
+          while IFS= read -r log; do
+            [ -z "$log" ] && continue
+            echo "### \`$log\`" >> /tmp/fde-out/scorecard.md
+            echo '```' >> /tmp/fde-out/scorecard.md
+            python -m fde score "$log" --strict >> /tmp/fde-out/scorecard.md 2>&1 || true
+            echo '```' >> /tmp/fde-out/scorecard.md
+            echo "" >> /tmp/fde-out/scorecard.md
+          done <<< "${{ steps.discover.outputs.logs }}"
+          cat /tmp/fde-out/scorecard.md
+      - name: Post PR comment
+        if: steps.discover.outputs.logs != ''
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: fde-score
+          path: /tmp/fde-out/scorecard.md

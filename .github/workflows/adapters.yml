@@ -1,0 +1,55 @@
+name: adapters
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".hermes/skills/fde-workflow.md"
+      - "scripts/build_adapters.py"
+      - ".claude/**"
+      - ".cursor/**"
+      - ".clinerules/**"
+      - ".continue/**"
+      - ".opencode/**"
+      - ".github/instructions/**"
+      - "AGENTS.md"
+  pull_request:
+
+jobs:
+  build-adapters:
+    name: Rebuild & verify adapters
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Snapshot adapter hashes BEFORE rebuild
+        run: |
+          for f in .claude/skills/fde-workflow/SKILL.md \
+                   .cursor/rules/fde-workflow.mdc \
+                   .clinerules/fde-workflow.md \
+                   .continue/rules/fde-workflow.md \
+                   .opencode/command/fde-workflow.md \
+                   .github/instructions/fde-workflow.instructions.md \
+                   AGENTS.md; do
+            sha256sum "$f" || echo "MISSING:$f"
+          done > /tmp/before.txt
+          cat /tmp/before.txt
+      - name: Rebuild adapters
+        run: python scripts/build_adapters.py
+      - name: Verify adapters are unchanged (build is idempotent)
+        run: |
+          for f in .claude/skills/fde-workflow/SKILL.md \
+                   .cursor/rules/fde-workflow.mdc \
+                   .clinerules/fde-workflow.md \
+                   .continue/rules/fde-workflow.md \
+                   .opencode/command/fde-workflow.md \
+                   .github/instructions/fde-workflow.instructions.md \
+                   AGENTS.md; do
+            sha256sum "$f" || echo "MISSING:$f"
+          done > /tmp/after.txt
+          diff /tmp/before.txt /tmp/after.txt && echo "OK: adapters deterministic"
+      - name: Validate frontmatter
+        run: python -m unittest tests.test_adapters -v

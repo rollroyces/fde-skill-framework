@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # No third-party deps — the framework is stdlib only by design.
+          # If hypothesis is added later for property tests, install it here.
+      - name: Run full test suite
+        run: |
+          python -m unittest discover -s tests -v
+      - name: Run bundled-fixture smoke test
+        run: |
+          python tests/test_fde_eval.py > /tmp/smoke.log
+          tail -5 /tmp/smoke.log
