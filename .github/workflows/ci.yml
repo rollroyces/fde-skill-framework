@@ -20,12 +20,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-      - name: Install dependencies
+          # No cache:pip — the framework is intentionally zero-dep, so
+          # there is no requirements.txt or pyproject.toml to cache against.
+      - name: Install optional test deps (hypothesis for property tests)
         run: |
           python -m pip install --upgrade pip
-          # No third-party deps — the framework is stdlib only by design.
-          # If hypothesis is added later for property tests, install it here.
+          python -m pip install hypothesis || echo "hypothesis install failed — property tests will be skipped"
       - name: Run full test suite
         run: |
           python -m unittest discover -s tests -v
