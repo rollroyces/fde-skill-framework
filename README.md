@@ -81,22 +81,82 @@ What you just saw:
 .
 ├── .hermes/
 │   └── skills/
-│       └── fde-workflow.md         # The four-phase loop, anti-patterns, exit gates
+│       └── fde-workflow.md         # Canonical skill — single source of truth
+├── .claude/
+│   └── skills/
+│       └── fde-workflow/SKILL.md   # Claude Code adapter (generated)
+├── .cursor/
+│   └── rules/
+│       └── fde-workflow.mdc        # Cursor adapter (generated)
+├── .clinerules/
+│   └── fde-workflow.md             # Cline / Roo-Code adapter (generated)
+├── .continue/
+│   └── rules/
+│       └── fde-workflow.md         # Continue.dev adapter (generated)
+├── .opencode/
+│   └── command/
+│       └── fde-workflow.md         # OpenCode adapter (generated)
+├── .github/
+│   └── instructions/
+│       └── fde-workflow.instructions.md   # Copilot adapter (generated)
 ├── .hermes.md                       # Project-wide business metrics, SLA defaults, tech stack contract
+├── AGENTS.md                        # Codex CLI / generic adapter (generated)
 ├── fde/                             # CLI wrapper (stdlib only; zero install)
 │   ├── __init__.py                  #   subcommands: score, init, log-week, watch
 │   └── __main__.py                  #   entry point for `python -m fde`
 ├── references/
 │   └── business-discovery-template.md  # Stakeholder interview template
+├── scripts/
+│   ├── build_adapters.py            # Regenerate all 8 adapters from the canonical skill
+│   └── install_global.sh            # Copy adapters into ~/.claude, ~/.cursor, etc.
 ├── tests/
 │   ├── test_fde_eval.py            # Black-box evaluator (4 axes, weighted)
-│   └── test_cli.py                  # CLI smoke tests — guarantee CLI uses same evaluator
+│   ├── test_cli.py                  # CLI smoke tests
+│   └── test_adapters.py             # Adapter frontmatter + drift tests
 ├── docs/
 │   ├── hero.png                     # This README's hero diagram (2x retina)
 │   ├── hero.svg                     # Vector version for viewports that prefer SVG
 │   └── fde-watch-demo.gif           # Animated terminal demo
 └── README.md                        # This file
 ```
+
+## Agent coverage
+
+The framework ships adapter files for **eight** AI coding agents. The
+canonical skill lives at `.hermes/skills/fde-workflow.md`; everything
+else is generated from it by `scripts/build_adapters.py` so the rules
+cannot drift between runtimes.
+
+| Agent              | Loader path                                       | Format                  |
+|--------------------|---------------------------------------------------|-------------------------|
+| **Hermes**         | `.hermes/skills/fde-workflow.md`                  | YAML frontmatter + MD   |
+| **Claude Code**    | `.claude/skills/fde-workflow/SKILL.md`            | YAML frontmatter + MD   |
+| **Cursor**         | `.cursor/rules/fde-workflow.mdc`                  | `.mdc` (globs + MD)     |
+| **Cline / Roo-Code** | `.clinerules/fde-workflow.md`                   | Plain markdown          |
+| **GitHub Copilot** | `.github/instructions/fde-workflow.instructions.md` | `applyTo` frontmatter + MD |
+| **Continue.dev**   | `.continue/rules/fde-workflow.md`                 | YAML frontmatter + MD   |
+| **OpenCode**       | `.opencode/command/fde-workflow.md`               | YAML frontmatter + MD   |
+| **Codex / generic**| `AGENTS.md`                                       | Plain markdown (auto-discovered) |
+
+After editing the canonical skill, regenerate everything:
+
+```bash
+python scripts/build_adapters.py
+python -m unittest tests.test_adapters    # validates frontmatter + drift
+```
+
+To install the FDE workflow as a **global rule** in every agent on this
+machine:
+
+```bash
+bash scripts/install_global.sh
+```
+
+The global install re-builds and then copies the adapters into
+`~/.claude/`, `~/.cursor/`, `~/.clinerules/`, `~/.continue/`,
+`~/.opencode/`, and `~/.copilot/`. Hermes and Codex stay project-scoped
+by design (Hermes loads per-repo config; `AGENTS.md` is committed to
+the repo root).
 
 ## Install into Hermes
 
