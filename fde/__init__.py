@@ -512,6 +512,137 @@ TBD (use `fde log-week` to append measurements, then `fde score`)
 """
 
 
+# --------------------------------------------------------------------------- #
+# list — index of every engagement under a directory
+# --------------------------------------------------------------------------- #
+
+def _safe_relative(path: Path, anchor: Path) -> str:
+    """Return str(path) relative to anchor, falling back to the path's
+    own string if path is not inside anchor. Without this, listing
+    engagement logs outside the repo (e.g. /tmp/...) raises ValueError."""
+    try:
+        return str(path.resolve().relative_to(anchor.resolve()))
+    except ValueError:
+        return str(path)
+
+
+def _score_engagement(log_path: Path) -> dict | None:
+    """Score a single engagement log and return a compact summary dict.
+
+    Returns None if the log is malformed (so the caller can skip without
+    crashing the whole list). The summary is the minimum info needed
+    to render a navigable index table.
+    """
+    try:
+        run = json.loads(log_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+    try:
+        rep = _harness.evaluate(run)
+    except Exception:
+        return None
+    metric = run.get("discovery", {}).get("metric", {})
+    metric_name = metric.get("name") or "?"
+    baseline = metric.get("baseline")
+    target = metric.get("target")
+    weeks = len(run.get("post_ga_log", []))
+    return {
+        "engagement": run.get("engagement", log_path.stem),
+        "file": _safe_relative(log_path, _HERE.parent),
+        "sponsor": run.get("discovery", {}).get("sponsor") or "",
+        "metric_name": metric_name,
+        "baseline": baseline,
+        "target": target,
+        "weeks": weeks,
+        "overall": rep.overall,
+        "decision": rep.decision,
+    }
+
+
+def _format_list_table(rows: list[dict]) -> str:
+    """Render rows as a fixed-width human-readable table."""
+    if not rows:
+        return "(no engagement logs found)\n"
+
+    headers = ("Engagement", "Sponsor", "Metric", "Weeks",
+               "Overall", "Decision")
+    widths = [22, 18, 22, 6, 8, 10]
+
+    def _truncate(s: str, w: int) -> str:
+        s = (s or "").strip()
+        return s[: w - 1] + "…" if len(s) > w else s
+
+    def _row(name, sponsor, metric, weeks, overall, decision):
+        return (
+            _truncate(name, widths[0]).ljust(widths[0]),
+            _truncate(sponsor, widths[1]).ljust(widths[1]),
+            _truncate(metric, widths[2]).ljust(widths[2]),
+            str(weeks).rjust(widths[3]),
+            f"{overall:6.1f}".rjust(widths[4]),
+            decision.ljust(widths[5]),
+        )
+
+    lines = []
+    sep = "  ".join("-" * w for w in widths)
+    lines.append("  ".join(h.ljust(widths[i]) if i not in (3, 4)
+                              else h.rjust(widths[i])
+                              for i, h in enumerate(headers)))
+    lines.append(sep)
+    for r in rows:
+        cols = _row(r["engagement"], r["sponsor"], r["metric_name"],
+                    r["weeks"], r["overall"], r["decision"])
+        lines.append("  ".join(cols))
+    return "\n".join(lines) + "\n"
+
+
+def _format_list_markdown(rows: list[dict]) -> str:
+    """Render rows as a Markdown table for engagements/INDEX.md."""
+    if not rows:
+        return "# Engagements index\n\n(no engagement logs found)\n"
+    lines = ["# Engagements index\n",
+             f"_{len(rows)} engagement{'s' if len(rows) != 1 else ''}._\n",
+             "| Engagement | Sponsor | Metric | Weeks | Overall | Decision |",
+             "|---|---|---|---:|---:|---|"]
+    for r in rows:
+        sponsor = r["sponsor"] or "(none)"
+        lines.append(
+            f"| `{r['engagement']}` | {sponsor} | {r['metric_name']} | "
+            f"{r['weeks']} | {r['overall']:.1f} | {r['decision']} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    """Index every engagement under a directory.
+
+    Scans for `*.log.json` files, scores each, and prints a navigable
+    table. Outputs go to stdout, errors go to stderr. Exit 0 even when
+    the directory is empty (no engagements yet is a valid state).
+    """
+    target = Path(args.dir)
+    if not target.is_dir():
+        print(f"error: not a directory: {target}", file=sys.stderr)
+        return 2
+    logs = sorted(target.glob("*.log.json"))
+    rows = []
+    for p in logs:
+        summary = _score_engagement(p)
+        if summary is not None:
+            rows.append(summary)
+    if args.json:
+        print(json.dumps(rows, indent=2))
+    elif args.markdown:
+        # Markdown output writes the file (and prints nothing extra) so
+        # `python -m fde list --markdown > INDEX.md` works as expected.
+        md = _format_list_markdown(rows)
+        out = Path(args.markdown)
+        out.write_text(md)
+        print(f"wrote {out}", file=sys.stderr)
+    else:
+        print(_format_list_table(rows))
+    return 0
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     today = args.date or date.today().isoformat()
     out_dir = Path(args.dir)
@@ -764,6 +895,21 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--json", action="store_true",
                    help="Emit machine-readable explanation JSON.")
     d.set_defaults(func=cmd_doctor)
+
+    # list
+    ls = sub.add_parser(
+        "list",
+        help="Index every engagement log under a directory with score, "
+             "decision, and one-line summary.")
+    ls.add_argument("--dir", default="engagements",
+                    help="Directory to scan for *.log.json (default: "
+                         "./engagements).")
+    ls.add_argument("--json", action="store_true",
+                    help="Emit machine-readable JSON instead of a table.")
+    ls.add_argument("--markdown", metavar="PATH",
+                    help="Write a Markdown index to this path (e.g. "
+                         "engagements/INDEX.md).")
+    ls.set_defaults(func=cmd_list)
 
     return p
 
