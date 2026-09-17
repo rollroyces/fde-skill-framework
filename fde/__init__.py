@@ -103,6 +103,296 @@ def _format_scorecard(rep, as_json: bool = False) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Doctor — explain WHY an engagement scored what it did
+# --------------------------------------------------------------------------- #
+
+# Friendly labels for Discovery checks (matches harness order so the list
+# reads top-down in the same order the scorecard was computed).
+_BUSINESS_CHECK_LABELS = {
+    "sponsor_named":              "sponsor name",
+    "metric_named":               "metric M name",
+    "baseline_present":           "metric baseline",
+    "target_present":             "metric target",
+    "target_date_present":        "metric target date",
+    "target_better_than_baseline": "metric target differs from baseline",
+    "stakeholders_present":       ">=3 stakeholders named",
+    "constraints_documented":     "constraints documented",
+    "roi_value_per_unit":         "ROI value_per_unit",
+    "roi_volume":                 "ROI volume_per_year",
+    "roi_cost_ceiling":           "ROI cost_ceiling_usd",
+    "sla_p99_documented":         "SLA p99_ms",
+}
+
+
+def _classify_week(week: dict, sla: dict) -> dict:
+    """Compare a single week's measurement against the SLA. Mirrors the
+    logic in test_fde_eval.score_sla so the doctor can name weeks, not
+    just count them."""
+    out = {"week": week.get("week")}
+    if _harness._is_number(week.get("p99_ms")) and _harness._is_number(
+            sla.get("p99_ms")):
+        out["p99_breach"] = week["p99_ms"] > sla["p99_ms"]
+        out["p99_ms"] = week["p99_ms"]
+    if _harness._is_number(week.get("error_rate")) and _harness._is_number(
+            sla.get("error_budget_pct")):
+        budget = sla["error_budget_pct"] / 100.0
+        out["err_breach"] = week["error_rate"] > budget
+        out["error_rate"] = week["error_rate"]
+    if _harness._is_number(week.get("availability_pct")) and \
+            _harness._is_number(sla.get("availability_pct")):
+        out["avail_breach"] = week["availability_pct"] < sla["availability_pct"]
+        out["availability_pct"] = week["availability_pct"]
+    return out
+
+
+def _explain(run: dict, rep, sla: dict) -> dict:
+    """Build a structured explanation of the Report. Returns a dict so
+    the same structure can be JSON-emitted."""
+    business_missing = rep.business.get("missing", [])
+    breaches = rep.sla.get("breaches", {}) or {}
+    latency = rep.latency
+    errors = rep.error_rate
+
+    # Walk the post-GA log to identify the specific weeks that breached.
+    # The harness only counts breaches; doctor names them.
+    weekly = [_classify_week(w, sla) for w in run.get("post_ga_log", [])]
+    p99_weeks = [w["week"] for w in weekly if w.get("p99_breach")]
+    err_weeks = [w["week"] for w in weekly if w.get("err_breach")]
+    avail_weeks = [w["week"] for w in weekly if w.get("avail_breach")]
+    total_breach_weeks = sorted({
+        w for w in (p99_weeks + err_weeks + avail_weeks)
+        if w is not None
+    })
+
+    return {
+        "engagement": rep.engagement,
+        "overall": rep.overall,
+        "decision": rep.decision,
+        "business": {
+            "score": rep.business.get("score", 0),
+            "missing": business_missing,
+            "missing_labels": [_BUSINESS_CHECK_LABELS.get(m, m)
+                               for m in business_missing],
+            "healthy": not business_missing,
+        },
+        "sla": {
+            "score": rep.sla.get("score", 0),
+            "weeks_observed": rep.sla.get("weeks_observed", 0),
+            "breaches": breaches,
+            "breach_weeks": {
+                "p99": p99_weeks,
+                "error_rate": err_weeks,
+                "availability": avail_weeks,
+            },
+            "weeks_with_any_breach": total_breach_weeks,
+            "targets": rep.sla.get("targets", {}),
+            "measured_means": rep.sla.get("measured_means", {}),
+            "healthy": (
+                breaches.get("p99", 0) == 0
+                and breaches.get("error_rate", 0) == 0
+                and breaches.get("availability", 0) == 0
+                and rep.sla.get("weeks_observed", 0) > 0
+            ),
+        },
+        "latency": {
+            "score": latency.get("score", 0),
+            "trend": latency.get("trend", "?"),
+            "ratio_second_to_first": latency.get("ratio_second_to_first"),
+            "avg_first_half_p99_ms": latency.get("avg_first_half_p99_ms"),
+            "avg_second_half_p99_ms": latency.get("avg_second_half_p99_ms"),
+            "healthy": latency.get("trend") in ("improving", "stable"),
+        },
+        "errors": {
+            "score": errors.get("score", 0),
+            "mean_error_rate": errors.get("mean_error_rate"),
+            "budget": errors.get("budget"),
+            "weeks_over_budget": errors.get("weeks_over_budget", 0),
+            "weeks_over_ceiling": errors.get("weeks_over_ceiling", 0),
+            "weeks_observed": errors.get("weeks_observed", 0),
+            "healthy": (
+                errors.get("weeks_over_budget", 0) == 0
+                and errors.get("weeks_observed", 0) > 0
+            ),
+        },
+        "reasons": rep.reasons,
+    }
+
+
+def _format_doctor(expl: dict) -> str:
+    """Render an explanation dict as human-readable text. Sized to fit a
+    typical terminal (~35 lines) so the doctor output doesn't scroll-spam."""
+    lines = []
+    eng = expl["engagement"]
+    overall = expl["overall"]
+    decision = expl["decision"]
+    glyph = VERDICT_GLYPH.get(decision, decision)
+
+    lines.append(f"{glyph}  {eng}  ->  overall {overall:.1f} / 100")
+    lines.append("")
+
+    # --- Discovery ---
+    biz = expl["business"]
+    if biz["healthy"]:
+        lines.append("Discovery: complete (no missing fields).")
+        lines.append("  -> next: keep Discovery fresh -- re-check on every "
+                     "scope change.")
+    else:
+        miss = biz["missing_labels"]
+        lines.append(f"Discovery: missing {len(miss)} of 12 checks:")
+        for label in miss:
+            lines.append(f"  - {label}")
+        lines.append("  -> next: run `fde log-week` or edit the JSON to fill "
+                     "these in before any further ship.")
+
+    # --- SLA ---
+    sla = expl["sla"]
+    weeks_obs = sla["weeks_observed"]
+    weeks_label = "week" if weeks_obs == 1 else "weeks"
+    b = sla["breaches"]
+    total = (b.get("p99", 0) + b.get("error_rate", 0)
+             + b.get("availability", 0))
+    if weeks_obs == 0:
+        lines.append("")
+        lines.append("SLA: no post-GA measurements yet (0 weeks observed).")
+        lines.append("  -> next: run `fde log-week` weekly after each ship.")
+    elif total == 0:
+        means = sla.get("measured_means") or {}
+        targets = sla.get("targets") or {}
+        target_p99 = targets.get("p99_ms")
+        mean_p99 = means.get("p99_ms")
+        p99_str = (f"p99 mean {mean_p99}ms vs target {target_p99}ms"
+                   if mean_p99 is not None and target_p99 is not None
+                   else "")
+        lines.append("")
+        lines.append(f"SLA: 0 breaches across {weeks_obs} {weeks_label}"
+                     + (f" ({p99_str})." if p99_str else "."))
+        lines.append("  -> next: keep watching; any single breach drops the "
+                     "SLA score.")
+    else:
+        any_weeks = sla["weeks_with_any_breach"]
+        week_str = (f" -- weeks {any_weeks}" if any_weeks else "")
+        parts = []
+        if b.get("p99"):
+            parts.append(f"{b['p99']}x p99 "
+                         f"(weeks {sla['breach_weeks']['p99']})")
+        if b.get("error_rate"):
+            parts.append(f"{b['error_rate']}x error_rate "
+                         f"(weeks {sla['breach_weeks']['error_rate']})")
+        if b.get("availability"):
+            parts.append(f"{b['availability']}x availability "
+                         f"(weeks {sla['breach_weeks']['availability']})")
+        targets = sla.get("targets") or {}
+        target_p99 = targets.get("p99_ms")
+        means = sla.get("measured_means") or {}
+        mean_p99 = means.get("p99_ms")
+        p99_str = (f", p99 mean {mean_p99}ms vs target {target_p99}ms"
+                   if mean_p99 is not None and target_p99 is not None
+                   else "")
+        lines.append("")
+        lines.append(
+            f"SLA: {total} breach{'es' if total != 1 else ''} across "
+            f"{weeks_obs} {weeks_label}{week_str} -- "
+            f"{'; '.join(parts)}{p99_str}."
+        )
+        lines.append("  -> next: investigate the named weeks first; a "
+                     "single repeat breach can be a flake, a cluster is a "
+                     "real regression.")
+
+    # --- Latency ---
+    lat = expl["latency"]
+    ratio = lat["ratio_second_to_first"]
+    ratio_str = (f"{ratio:.3f}" if isinstance(ratio, (int, float))
+                 else str(ratio))
+    healthy_label = {"improving": "improving", "stable": "stable",
+                     "degrading": "DEGRADING",
+                     "insufficient_data": "insufficient data"}.get(
+        lat["trend"], lat["trend"])
+    lines.append("")
+    if lat["trend"] == "insufficient_data":
+        lines.append("Latency: insufficient data (<2 weeks observed).")
+        lines.append("  -> next: keep logging weekly; trend needs >=2 weeks.")
+    else:
+        lines.append(f"Latency: trending {healthy_label} (ratio "
+                     f"second/first = {ratio_str}).")
+        if lat["trend"] == "degrading":
+            lines.append("  -> next: open a regression ticket -- second-half "
+                         "p99 is climbing.")
+        else:
+            lines.append("  -> next: no action; keep logging.")
+
+    # --- Errors ---
+    err = expl["errors"]
+    lines.append("")
+    err_weeks_obs = err["weeks_observed"]
+    err_weeks_label = "week" if err_weeks_obs == 1 else "weeks"
+    if err_weeks_obs == 0:
+        lines.append("Errors: no error_rate measurements yet.")
+        lines.append("  -> next: log error_rate in `fde log-week`.")
+    else:
+        over = err["weeks_over_budget"]
+        over_ceil = err["weeks_over_ceiling"]
+        budget = err["budget"]
+        mean = err["mean_error_rate"]
+        over_str = (f" ({over} week{'s' if over != 1 else ''} over budget"
+                    f", {over_ceil} over the 50% ceiling)"
+                    if over or over_ceil else "")
+        lines.append(f"Errors: mean {mean} vs budget {budget}{over_str} "
+                     f"across {err_weeks_obs} {err_weeks_label}.")
+        if over:
+            lines.append("  -> next: dependency-rot suspect -- check upstream "
+                         "APIs and timeouts.")
+        else:
+            lines.append("  -> next: no action; error rate is within budget.")
+
+    # --- Decision ---
+    lines.append("")
+    lines.append(f"Decision: {decision.upper()} "
+                 f"(overall {overall:.1f}, business {biz['score']:.1f}).")
+    if decision == "cut":
+        lines.append("  -> next: wind down cleanly, write up lessons, hand "
+                     "off what shipped.")
+    elif decision == "iterate":
+        lines.append("  -> next: pick the lowest-scoring axis and run one "
+                     "bounded iteration.")
+    else:
+        lines.append("  -> next: expand to the next workflow / customer.")
+
+    return "\n".join(lines)
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Introspect an engagement log and explain WHY each axis scored what
+    it did. Exit codes: 0 healthy, 1 actionable issues, 2 file/JSON
+    unreadable."""
+    path = Path(args.log)
+    if not path.is_file():
+        print(f"error: log file not found: {path}", file=sys.stderr)
+        return 2
+    try:
+        run = json.loads(path.read_text())
+    except json.JSONDecodeError as e:
+        print(f"error: {path} is not valid JSON: {e}", file=sys.stderr)
+        return 2
+
+    rep = _harness.evaluate(run)
+    # Same SLA fallback the harness uses, so breach math here matches
+    # breach counts in the report exactly.
+    sla = (run.get("discovery", {}).get("sla")
+           or _harness.DEFAULT_SLA["customer_api"])
+
+    expl = _explain(run, rep, sla)
+    if args.json:
+        print(json.dumps(expl, indent=2, default=str))
+    else:
+        print(_format_doctor(expl))
+
+    if expl["business"]["healthy"] and expl["sla"]["healthy"] \
+            and expl["latency"]["healthy"] and expl["errors"]["healthy"]:
+        return 0
+    return 1
+
+
+# --------------------------------------------------------------------------- #
 # score
 # --------------------------------------------------------------------------- #
 
@@ -277,9 +567,14 @@ def cmd_log_week(args: argparse.Namespace) -> int:
         run = json.loads(path.read_text())
     else:
         # Auto-scaffold an empty log mirroring `init`. Discovery fields stay
-        # empty; the user fills them with `fde init` separately.
+        # empty; the user fills them with `fde init` separately. The
+        # `engagement` field is the human codename (matches the markdown
+        # header produced by `fde init`); the filename stem may have a
+        # date suffix for uniqueness.
         run = {
-            "engagement": path.stem.replace(".log", ""),
+            "engagement": path.stem.split("-")[0]
+                          if re.match(r"^[A-Za-z0-9_-]+$", path.stem)
+                          else path.stem,
             "discovery": {
                 "sponsor": "", "metric": {}, "sla": {},
                 "constraints": [], "stakeholders": [], "roi_inputs": {},
@@ -406,7 +701,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="fde",
         description="CLI wrapper around the FDE evaluation harness. "
-                    "Subcommands: score, init, log-week, watch.",
+                    "Subcommands: score, init, log-week, watch, doctor.",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -459,6 +754,16 @@ def build_parser() -> argparse.ArgumentParser:
     imp.add_argument("--engagement", default=None,
                      help="Engagement id (e.g. 'acme-2026-09-16').")
     imp.set_defaults(func=cmd_import)
+
+    # doctor
+    d = sub.add_parser(
+        "doctor",
+        help="Explain WHY each axis scored what it did (missing Discovery "
+             "fields, breached weeks, next actions).")
+    d.add_argument("log", help="Path to engagement log JSON.")
+    d.add_argument("--json", action="store_true",
+                   help="Emit machine-readable explanation JSON.")
+    d.set_defaults(func=cmd_doctor)
 
     return p
 

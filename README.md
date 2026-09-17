@@ -319,6 +319,28 @@ python -m fde watch engagements/globex-2026-09-16.log.json --once --strict
 
 # Live dashboard: re-score on every save
 python -m fde watch engagements/globex-2026-09-16.log.json --interval 1.0
+
+# WHY did this engagement score what it did? Names missing Discovery
+# fields, the specific weeks that breached SLA, and ends every section
+# with a concrete next action. Exits 0 if healthy, 1 if actionable, 2
+# if the file is unreadable.
+python -m fde doctor engagements/globex-2026-09-16.log.json
+# ->  v SCALE   globex-2026-09-16  ->  overall 100.0 / 100
+#
+#    Discovery: complete (no missing fields).
+#      -> next: keep Discovery fresh -- re-check on every scope change.
+#
+#    SLA: 0 breaches across 8 weeks (p99 mean 501ms vs target 2000ms).
+#      -> next: keep watching; any single breach drops the SLA score.
+#
+#    Latency: trending stable (ratio second/first = 1.000).
+#      -> next: no action; keep logging.
+#
+#    Errors: mean 0.00085 vs budget 0.005 across 8 weeks.
+#      -> next: no action; error rate is within budget.
+#
+#    Decision: SCALE (overall 100.0, business 100.0).
+#      -> next: expand to the next workflow / customer.
 ```
 
 ## Run the tests
