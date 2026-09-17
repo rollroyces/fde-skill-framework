@@ -109,10 +109,23 @@ What you just saw:
 ├── scripts/
 │   ├── build_adapters.py            # Regenerate all 8 adapters from the canonical skill
 │   └── install_global.sh            # Copy adapters into ~/.claude, ~/.cursor, etc.
+├── .devcontainer/
+│   ├── devcontainer.json            # Codespace / VS Code devcontainer spec
+│   └── postCreate.sh                # Runs on Codespace creation
 ├── tests/
 │   ├── test_fde_eval.py            # Black-box evaluator (4 axes, weighted)
 │   ├── test_cli.py                  # CLI smoke tests
-│   └── test_adapters.py             # Adapter frontmatter + drift tests
+│   ├── test_adapters.py             # Adapter frontmatter + drift tests
+│   ├── test_properties.py           # Hypothesis property-based tests
+│   └── test_importers.py            # Prometheus / Datadog / CSV importers
+├── fde/importers/
+│   ├── __init__.py                  # Importer registry
+│   ├── prometheus.py                # Prom HTTP API JSON → engagement log
+│   ├── datadog.py                   # Datadog metrics API JSON → engagement log
+│   └── csv_import.py                # Ad-hoc CSV → engagement log
+├── engagements/
+│   └── mrnavax-codonpair-v0.14.0-2026-09-16.md   # Dogfood engagement
+│       + .log.json                                    # Dogfood JSON log
 ├── docs/
 │   ├── hero.png                     # This README's hero diagram (2x retina)
 │   ├── hero.svg                     # Vector version for viewports that prefer SVG
@@ -157,6 +170,60 @@ The global install re-builds and then copies the adapters into
 `~/.opencode/`, and `~/.copilot/`. Hermes and Codex stay project-scoped
 by design (Hermes loads per-repo config; `AGENTS.md` is committed to
 the repo root).
+
+## Metrics ingest (`fde import`)
+
+Convert real monitoring exports into engagement logs so you don't have
+to hand-craft JSON. Three sources supported; CLI signature is identical:
+
+```bash
+python -m fde import prometheus /path/to/prom-dump.json engagement.log.json
+python -m fde import datadog    /path/to/dd-dump.json    engagement.log.json
+python -m fde import csv        /path/to/metrics.csv     engagement.log.json
+```
+
+The importers write a skeleton with **blank Discovery fields** — sponsor,
+metric M, baseline, target, and SLA are human decisions, not machine
+outputs. After importing, edit the JSON to fill those in, then `fde score`.
+
+Expected metric names per source:
+
+| Source      | Names accepted                                            |
+|-------------|------------------------------------------------------------|
+| Prometheus  | `fde_p99_ms`, `fde_error_rate`, `fde_availability_pct`, `fde_metric_value` (prefix `fde_` required) |
+| Datadog     | `fde.p99_ms`, `fde.error_rate`, `fde.availability_pct`, `fde.metric_value` |
+| CSV         | header `week,p99_ms,error_rate,availability_pct,metric_value` (only `week` required) |
+
+Samples are bucketed by ISO week before aggregation.
+
+## Dogfood engagement
+
+The repo ships one real engagement file (dogfood) for an `mrnavax`
+v0.14.0 feature (per-tissue codon-pair scoring). It walks the full
+loop end-to-end with sourced numbers and a post-GA ROI evaluation:
+
+```bash
+python -m fde score engagements/mrnavax-codonpair-v0.14.0-2026-09-16.log.json
+```
+
+The engagement scores 100/100 → **SCALE**, matching the in-file
+decision. If the harness ever disagrees with the in-file decision,
+that's a framework bug — file an issue.
+
+## Quickstart (Codespace / devcontainer)
+
+One-click environment with everything pre-loaded:
+
+```bash
+gh codespace create --repo rollroyces/fde-skill-framework
+```
+
+The `postCreate.sh` regenerates adapters, installs `hypothesis` for
+property tests, and runs the full suite as a smoke check. You land in
+a terminal ready for `python -m fde --help`.
+
+For local dev containers (Docker Desktop + VS Code "Reopen in
+Container"), the `.devcontainer/devcontainer.json` does the same.
 
 ## Install into Hermes
 

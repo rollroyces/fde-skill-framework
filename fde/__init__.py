@@ -21,6 +21,12 @@ Subcommands
   watch <log.json>            Tail a log file; re-score on every change and
                               print the scorecard. Bounded by --max N
                               re-evaluations; --once for single-shot (CI).
+  import <source> <input> <output>
+                              Convert a monitoring export into an engagement
+                              log. <source> is one of: prometheus, datadog,
+                              csv. Use --engagement NAME to set the
+                              engagement id. Discovery fields are left
+                              blank — humans fill those in, not importers.
 
 Run `python -m fde <subcommand> --help` for full options.
 """
@@ -296,6 +302,48 @@ def cmd_log_week(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# import — convert monitoring exports into engagement logs
+# --------------------------------------------------------------------------- #
+
+def cmd_import(args: argparse.Namespace) -> int:
+    """Convert a monitoring export into an engagement log.
+
+    Discovery fields are NOT filled by importers — they require a human
+    interview. The importer writes a skeleton with blank discovery fields
+    and a non-empty post_ga_log, ready for the user to fill in sponsor,
+    metric M, baseline, target, SLA via `fde log-week` or by editing JSON.
+    """
+    from fde.importers import IMPORTERS  # local import to keep CLI fast
+    if args.source not in IMPORTERS:
+        print(f"error: unknown source {args.source!r}; "
+              f"choose one of: {sorted(IMPORTERS)}", file=sys.stderr)
+        return 2
+    in_path = Path(args.input)
+    out_path = Path(args.output)
+    if not in_path.is_file():
+        print(f"error: input not found: {in_path}", file=sys.stderr)
+        return 2
+    try:
+        summary = IMPORTERS[args.source](in_path, out_path,
+                                          engagement=args.engagement)
+    except json.JSONDecodeError as e:
+        print(f"error: input is not valid JSON: {e}", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    weeks = summary.get("weeks", 0)
+    metrics = summary.get("metrics", [])
+    print(f"imported {weeks} weeks from {args.source} -> {out_path}")
+    if metrics:
+        print(f"  metrics found: {', '.join(metrics)}")
+    print(f"\nNext: fill in the Discovery fields in {out_path} (sponsor, "
+          f"metric M, baseline, target, SLA), then:")
+    print(f"  python -m fde score {out_path}")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
 # watch — tail a log file, re-score on every change
 # --------------------------------------------------------------------------- #
 
@@ -395,6 +443,17 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--once", action="store_true",
                    help="Score once and exit (use in CI).")
     w.set_defaults(func=cmd_watch)
+
+    # import
+    imp = sub.add_parser("import",
+                         help="Convert a monitoring export to an engagement log.")
+    imp.add_argument("source", choices=["prometheus", "datadog", "csv"],
+                     help="Input format.")
+    imp.add_argument("input", help="Path to the monitoring export.")
+    imp.add_argument("output", help="Path to write the engagement log JSON.")
+    imp.add_argument("--engagement", default=None,
+                     help="Engagement id (e.g. 'acme-2026-09-16').")
+    imp.set_defaults(func=cmd_import)
 
     return p
 

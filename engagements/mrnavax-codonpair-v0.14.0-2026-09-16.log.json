@@ -1,0 +1,92 @@
+{
+  "engagement": "mrnavax-codonpair-v0.14.0-2026-09-16",
+  "discovery": {
+    "sponsor": "Wei Chen, Head of Codon Tools",
+    "metric": {
+      "name": "hek293t_protein_yield_ug_per_ml",
+      "baseline": 412,
+      "target": 480,
+      "date": "2026-12-15"
+    },
+    "sla": {
+      "p99_ms": 2000,
+      "availability_pct": 99.5,
+      "error_budget_pct": 0.5
+    },
+    "constraints": [
+      "AWS us-east-1 only",
+      "no new vendors",
+      "Python 3.11+"
+    ],
+    "stakeholders": [
+      "Wei Chen (sponsor)",
+      "Lin Park (peer)",
+      "Pharma lab beta tester 1",
+      "Pharma lab beta tester 2",
+      "Pharma lab beta tester 3"
+    ],
+    "roi_inputs": {
+      "value_per_unit": 12000,
+      "volume_per_year": 48,
+      "cost_ceiling_usd": 10200
+    }
+  },
+  "post_ga_log": [
+    {
+      "week": 1,
+      "p99_ms": 480,
+      "error_rate": 0.0008,
+      "availability_pct": 99.92,
+      "metric_value": 503
+    },
+    {
+      "week": 2,
+      "p99_ms": 510,
+      "error_rate": 0.0009,
+      "availability_pct": 99.94,
+      "metric_value": 498
+    },
+    {
+      "week": 3,
+      "p99_ms": 495,
+      "error_rate": 0.0007,
+      "availability_pct": 99.93,
+      "metric_value": 511
+    },
+    {
+      "week": 4,
+      "p99_ms": 520,
+      "error_rate": 0.001,
+      "availability_pct": 99.91,
+      "metric_value": 502
+    },
+    {
+      "week": 5,
+      "p99_ms": 505,
+      "error_rate": 0.0009,
+      "availability_pct": 99.95,
+      "metric_value": 515
+    },
+    {
+      "week": 6,
+      "p99_ms": 490,
+      "error_rate": 0.0008,
+      "availability_pct": 99.94,
+      "metric_value": 509
+    },
+    {
+      "week": 7,
+      "p99_ms": 510,
+      "error_rate": 0.0009,
+      "availability_pct": 99.92,
+      "metric_value": 506
+    },
+    {
+      "week": 8,
+      "p99_ms": 500,
+      "error_rate": 0.0008,
+      "availability_pct": 99.93,
+      "metric_value": 518
+    }
+  ]
+}
