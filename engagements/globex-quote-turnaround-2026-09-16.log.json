@@ -1,0 +1,81 @@
+{
+  "engagement": "globex-quote-turnaround-2026-09-16",
+  "discovery": {
+    "sponsor": "Marta Kowalski, Director of Field Engineering (Globex)",
+    "metric": {
+      "name": "quote_turnaround_minutes",
+      "baseline": 240,
+      "target": 30,
+      "date": "2026-11-30"
+    },
+    "sla": {
+      "p50_ms": 120,
+      "p95_ms": 280,
+      "p99_ms": 400,
+      "availability_pct": 99.9,
+      "error_budget_pct": 0.5
+    },
+    "constraints": [
+      "Globex data residency: EU-only (Frankfurt region)",
+      "GDPR; PII fields (customer name, contact email) are in-scope",
+      "No new vendors — integrate with Globex's existing CPQ (Salesforce CPQ)",
+      "Must not regress the existing nightly batch close (4h SLA)"
+    ],
+    "stakeholders": [
+      "Marta Kowalski (sponsor, Field Eng Director)",
+      "Daniyar Aliyev (daily tech contact, Globex platform team)",
+      "Helena Schmidt (Globex security reviewer)",
+      "Tomás Rivera (Globex procurement / legal — DPA renewer)",
+      "Priya Patel (FDE lead)"
+    ],
+    "roi_inputs": {
+      "value_per_unit": 18.0,
+      "volume_per_year": 42000,
+      "cost_ceiling_usd": 320000
+    }
+  },
+  "post_ga_log": [
+    {
+      "week": 1,
+      "p99_ms": 610,
+      "error_rate": 0.0011,
+      "availability_pct": 99.85,
+      "metric_value": 112
+    },
+    {
+      "week": 2,
+      "p99_ms": 580,
+      "error_rate": 0.0009,
+      "availability_pct": 99.82,
+      "metric_value": 98
+    },
+    {
+      "week": 3,
+      "p99_ms": 560,
+      "error_rate": 0.0010,
+      "availability_pct": 99.78,
+      "metric_value": 86
+    },
+    {
+      "week": 4,
+      "p99_ms": 530,
+      "error_rate": 0.0008,
+      "availability_pct": 99.88,
+      "metric_value": 72
+    },
+    {
+      "week": 5,
+      "p99_ms": 540,
+      "error_rate": 0.0012,
+      "availability_pct": 99.80,
+      "metric_value": 58
+    },
+    {
+      "week": 6,
+      "p99_ms": 570,
+      "error_rate": 0.0010,
+      "availability_pct": 99.75,
+      "metric_value": 45
+    }
+  ]
+}

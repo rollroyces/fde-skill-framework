@@ -52,6 +52,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -384,49 +385,26 @@ def evaluate(run: dict) -> Report:
 
 # --------------------------------------------------------------------------- #
 # Bundled fixtures (smoke test of the harness itself)
+#
+# These are loaded from the dogfood engagement files under
+# `engagements/` so the test fixtures and the dogfood docs can't drift.
+# The mrnavax engagement is the SCALE example; initech is the CUT
+# example. The globex engagement covers the ITERATE branch (see
+# test_iterate_run_decision_iterate below).
 # --------------------------------------------------------------------------- #
 
-GOOD_RUN = {
-    "engagement": "acme-2026-09-16",
-    "discovery": {
-        "sponsor": "Jane Doe, VP Ops",
-        "metric": {"name": "quote_turnaround_minutes",
-                   "baseline": 240, "target": 30, "date": "2026-12-31"},
-        "sla": DEFAULT_SLA["customer_api"],
-        "constraints": ["GDPR", "EU-only data"],
-        "stakeholders": ["Jane Doe (sponsor)", "Wei Chen (daily)",
-                         "Priya Patel (security)", "Marc Dubois (legal)"],
-        "roi_inputs": {"value_per_unit": 12.5, "volume_per_year": 50000,
-                       "cost_ceiling_usd": 250000},
-    },
-    "post_ga_log": [
-        {"week": 1, "p99_ms": 480, "error_rate": 0.0002,
-         "availability_pct": 99.95, "metric_value": 90},
-        {"week": 2, "p99_ms": 470, "error_rate": 0.0003,
-         "availability_pct": 99.93, "metric_value": 70},
-        {"week": 3, "p99_ms": 460, "error_rate": 0.0002,
-         "availability_pct": 99.94, "metric_value": 55},
-        {"week": 4, "p99_ms": 455, "error_rate": 0.0002,
-         "availability_pct": 99.96, "metric_value": 40},
-    ],
-}
+ENGAGEMENTS_DIR = Path(__file__).resolve().parent.parent / "engagements"
 
-BAD_RUN = {
-    "engagement": "broken-2026-09-16",
-    "discovery": {
-        "sponsor": "",  # missing
-        "metric": {"name": "", "baseline": None, "target": None,
-                   "date": ""},  # missing
-        "sla": {},  # missing
-        "constraints": [],
-        "stakeholders": [],
-        "roi_inputs": {},
-    },
-    "post_ga_log": [
-        {"week": 1, "p99_ms": 1200, "error_rate": 0.05,
-         "availability_pct": 97.0, "metric_value": 200},
-    ],
-}
+
+def load_fixture(name: str) -> dict:
+    """Load a dogfood engagement fixture by stem (e.g. 'mrnavax-codonpair-v0.14.0-2026-09-16')."""
+    path = ENGAGEMENTS_DIR / f"{name}.log.json"
+    return json.loads(path.read_text())
+
+
+GOOD_RUN = load_fixture("mrnavax-codonpair-v0.14.0-2026-09-16")
+BAD_RUN = load_fixture("initech-shadow-it-2026-09-16")
+ITERATE_RUN = load_fixture("globex-quote-turnaround-2026-09-16")
 
 
 # --------------------------------------------------------------------------- #
@@ -437,6 +415,7 @@ def _smoke_assertions() -> None:
     """Pytest-shaped assertions. Raises AssertionError on failure."""
     good = evaluate(GOOD_RUN)
     bad = evaluate(BAD_RUN)
+    iterate = evaluate(ITERATE_RUN)
 
     assert good.overall >= 85, f"good run should score ≥85, got {good.overall}"
     assert good.decision == "scale", (
@@ -446,7 +425,7 @@ def _smoke_assertions() -> None:
         f"good run discovery should be 100, got {good.business['score']}"
     )
     assert good.sla["breaches"] == {"p99": 0, "error_rate": 0,
-                                     "availability": 0}, (
+                                    "availability": 0}, (
         f"good run should have zero SLA breaches, got {good.sla['breaches']}"
     )
 
@@ -458,6 +437,36 @@ def _smoke_assertions() -> None:
     assert bad.sla["breaches"]["p99"] >= 1, (
         f"bad run should breach p99 SLA, got {bad.sla['breaches']}"
     )
+
+    # ITERATE branch: Discovery complete (business=100), but SLA
+    # missed enough to drop overall into the 50–<85 window.
+    assert iterate.overall < 85, (
+        f"iterate run should score <85, got {iterate.overall}"
+    )
+    assert iterate.overall >= 50, (
+        f"iterate run should score ≥50, got {iterate.overall}"
+    )
+    assert iterate.business["score"] >= 60, (
+        f"iterate run should have business ≥60, "
+        f"got {iterate.business['score']}"
+    )
+    assert iterate.decision == "iterate", (
+        f"iterate run should be 'iterate', got {iterate.decision}"
+    )
+
+
+def test_iterate_run_decision_iterate():
+    """Standalone entry point — also called by TestIterateRun below."""
+    _smoke_assertions()
+
+
+class TestIterateRun(unittest.TestCase):
+    """Pytest-shaped wrapper so `unittest discover` and `pytest` both pick
+    up the iterate branch coverage. The harness itself doesn't use
+    unittest; this just exposes the same assertions via a TestCase."""
+
+    def test_iterate_run_decision_iterate(self):
+        _smoke_assertions()
 
 
 def main(argv: list[str]) -> int:

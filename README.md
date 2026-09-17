@@ -65,15 +65,18 @@ loop showing three real scorecards from the bundled fixtures:
 
 What you just saw:
 
-1. **SCALE 100/100** — `acme-2026-09-16`. Discovery complete, zero SLA
-   breaches, latency improving. Expand to next workflow.
-2. **CUT 7.5/100** — `broken-2026-09-16`. Discovery gaps (sponsor,
-   metric, baseline, target, ROI all missing). Wind down cleanly, write up
-   lessons, hand off what shipped.
+1. **SCALE 100/100** — `mrnavax-codonpair-v0.14.0-2026-09-16`. Discovery
+   complete, zero SLA breaches, latency improving. Expand to next workflow.
+2. **CUT 7.5/100** — `broken-2026-09-16` (legacy fixture). Discovery gaps
+   (sponsor, metric, baseline, target, ROI all missing). Wind down cleanly,
+   write up lessons, hand off what shipped.
 3. **SCALE 96.4/100** — same engagement re-scored after week 5 of post-GA
    data. SLA score dropped slightly on a single availability breach, but
    decision holds. This is the `watch` loop in action — no JSON crafting,
    the file changes, the scorecard updates.
+
+For the current dogfood set (mrnavax / globex / initech), see the
+**Dogfood engagement** section below.
 
 ## What's in this repo
 
@@ -124,8 +127,9 @@ What you just saw:
 │   ├── datadog.py                   # Datadog metrics API JSON → engagement log
 │   └── csv_import.py                # Ad-hoc CSV → engagement log
 ├── engagements/
-│   └── mrnavax-codonpair-v0.14.0-2026-09-16.md   # Dogfood engagement
-│       + .log.json                                    # Dogfood JSON log
+│   ├── mrnavax-codonpair-v0.14.0-2026-09-16.{md,log.json}   # Dogfood SCALE
+│   ├── globex-quote-turnaround-2026-09-16.{md,log.json}     # Dogfood ITERATE
+│   └── initech-shadow-it-2026-09-16.{md,log.json}           # Dogfood CUT
 ├── docs/
 │   ├── hero.png                     # This README's hero diagram (2x retina)
 │   ├── hero.svg                     # Vector version for viewports that prefer SVG
@@ -198,17 +202,34 @@ Samples are bucketed by ISO week before aggregation.
 
 ## Dogfood engagement
 
-The repo ships one real engagement file (dogfood) for an `mrnavax`
-v0.14.0 feature (per-tissue codon-pair scoring). It walks the full
-loop end-to-end with sourced numbers and a post-GA ROI evaluation:
+The repo ships **three** real engagement files (dogfood) covering all
+three decision branches:
+
+| Engagement                          | Decision | Scenario                                                            |
+|-------------------------------------|----------|---------------------------------------------------------------------|
+| `mrnavax-codonpair-v0.14.0`         | SCALE    | Per-tissue codon-pair scoring — Discovery clean, ROI 10.8×         |
+| `globex-quote-turnaround`           | ITERATE  | Salesforce-CPQ-backed quoting — direction right, SLA missed every week |
+| `initech-shadow-it`                 | CUT      | Endpoint threat detection — sponsor overrode FDE lead, Shadow IT realized |
+
+All three walk the full Discovery → Architecture → Build → ROI loop
+end-to-end with sourced numbers and a post-GA ROI evaluation:
 
 ```bash
+# Score any of the three
 python -m fde score engagements/mrnavax-codonpair-v0.14.0-2026-09-16.log.json
+python -m fde score engagements/globex-quote-turnaround-2026-09-16.log.json
+python -m fde score engagements/initech-shadow-it-2026-09-16.log.json
 ```
 
-The engagement scores 100/100 → **SCALE**, matching the in-file
-decision. If the harness ever disagrees with the in-file decision,
-that's a framework bug — file an issue.
+The mrnavax engagement scores 100/100 → **SCALE**, the globex engagement
+scores ~79/100 → **ITERATE**, and the initech engagement scores ~24/100
+→ **CUT** — each matching its in-file decision. If the harness ever
+disagrees with an in-file decision, that's a framework bug — file an
+issue.
+
+The test suite (`tests/test_fde_eval.py`) loads these same engagement
+files as its `GOOD_RUN`, `BAD_RUN`, and `ITERATE_RUN` fixtures, so the
+scoring harness can't drift from the dogfood docs.
 
 ## Quickstart (Codespace / devcontainer)
 
