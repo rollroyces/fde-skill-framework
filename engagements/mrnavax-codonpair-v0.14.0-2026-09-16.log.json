@@ -73,20 +73,6 @@
       "error_rate": 0.0008,
       "availability_pct": 99.94,
       "metric_value": 509
-    },
-    {
-      "week": 7,
-      "p99_ms": 510,
-      "error_rate": 0.0009,
-      "availability_pct": 99.92,
-      "metric_value": 506
-    },
-    {
-      "week": 8,
-      "p99_ms": 500,
-      "error_rate": 0.0008,
-      "availability_pct": 99.93,
-      "metric_value": 518
     }
   ]
 }

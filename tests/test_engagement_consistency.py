@@ -178,16 +178,53 @@ def _extract_build_section(md_text: str) -> str:
     return "\n".join(lines[start:end])
 
 
-def _count_build_entries(build_section: str) -> int:
-    """Count weekly entries: lines matching `- YYYY-MM-DD...` or `- <text>:`.
+# Lines that look like a post-GA telemetry bullet. A bullet is "weekly
+# telemetry" iff it (a) starts with `-` and (b) reports at least one of
+# the three measured quantities: p99 latency, error rate, availability.
+# Release milestones (vertical slice, GA, postmortem, etc.) do NOT match
+# this filter — they're real and important but they're not weekly entries.
+_WEEKLY_TELEMETRY_RE = re.compile(
+    r"\b(p99[_ ]?(ms|latency)?|error[_ ]?rate|availability|error[_ ]?budget)\b",
+    re.IGNORECASE,
+)
 
-    A "weekly entry" is a top-level bullet whose first word cluster is
-    followed by `:` and more text — that matches the dogfood markdown's
-    `- 2026-09-23: vertical slice...` pattern without hard-coding
-    YYYY-MM-DD (some teams use `W12: ...`).
+
+def _count_build_entries(build_section: str) -> int:
+    """Count weekly post-GA telemetry bullets in a `## Build` section.
+
+    A bullet qualifies iff it matches the basic `- <text>: <text>` shape
+    AND mentions at least one of the measured quantities (p99 latency,
+    error rate, availability) ANYWHERE in the bullet — including
+    continuation lines, since the dogfood engagement wraps bullets
+    across multiple lines. Release-milestone bullets ("vertical slice
+    live", "GA", "postmortem", etc.) are intentionally excluded only when
+    they don't report telemetry; if a milestone bullet happens to
+    include p99/availability numbers (e.g. "vertical slice live,
+    p99=720ms") it's still counted.
     """
-    return sum(1 for ln in build_section.splitlines()
-               if _BUILD_ENTRY_RE.match(ln))
+    basic_re = re.compile(r"^\s*-\s+\S[^:]*:\s+\S")
+    n = 0
+    current_lines: list[str] = []
+
+    def _flush() -> None:
+        nonlocal n
+        if not current_lines:
+            return
+        joined = "\n".join(current_lines)
+        if basic_re.match(current_lines[0]) and _WEEKLY_TELEMETRY_RE.search(joined):
+            n += 1
+        current_lines.clear()
+
+    for ln in build_section.splitlines():
+        if ln.lstrip().startswith("- "):
+            _flush()
+            current_lines.append(ln)
+        elif current_lines and ln.strip() == "":
+            _flush()
+        elif current_lines:
+            current_lines.append(ln)
+    _flush()
+    return n
 
 
 def _extract_decision_from_markdown(roi_section: str):
@@ -390,8 +427,12 @@ GOOD_MD_TEMPLATE = """\
 
 def _render_good_md(decision: str = "SCALE", entry_count: int = 4,
                     name: str = "fuzz-test-engagement") -> str:
+    # Each bullet must mention at least one telemetry keyword (p99 /
+    # availability / error_rate) so it counts as a post-GA telemetry
+    # bullet under the consistency check, matching the JSON weeks.
     entries = "\n".join(
-        f"- 2026-09-{i:02d}: weekly update {i}"
+        f"- 2026-09-{i:02d}: week {i} post-GA — p99=400ms, "
+        f"error_rate=0.0001, availability=99.95% (under target)."
         for i in range(1, entry_count + 1)
     )
     return GOOD_MD_TEMPLATE.format(name=name, build_entries=entries,

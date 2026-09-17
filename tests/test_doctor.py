@@ -78,34 +78,39 @@ class TestDoctorExitCodes(unittest.TestCase):
             os.unlink(path)
 
     def test_bad_run_exits_one_and_lists_all_twelve_missing(self):
-        """BAD_RUN is missing every Discovery check. Doctor must:
-        - exit 1
-        - list ALL 12 missing fields
-        - name which weeks breached SLA."""
+        """BAD_RUN is sourced from engagements/initech-shadow-it-2026-09-16,
+        which has sponsor + 1 stakeholder but is missing the bulk of
+        Discovery (9 of 12 checks). Doctor must:
+          - exit 1
+          - report the count of missing fields accurately
+          - name which weeks breached SLA.
+        """
         path = _write_run(harness.BAD_RUN)
         try:
             rc, out, err = _captured_run(["doctor", path])
             self.assertEqual(rc, 1,
                              f"bad run should exit 1, got {rc}; "
                              f"stderr={err!r}")
-            # 12 of 12 - matches the harness's score_business check count.
-            self.assertIn("missing 12 of 12", out)
-            # Spot-check every missing label appears. Labels live in
-            # fde._BUSINESS_CHECK_LABELS.
+            # 9 of 12 — sponsor + 1 stakeholder + sponsor_named are
+            # the only Discovery fields the initech fixture fills.
+            self.assertIn("missing 9 of 12", out,
+                          "doctor must report missing count")
+            # Spot-check the labels that ARE missing in the initech
+            # fixture (sponsor + SLA p99 + metric name are filled,
+            # so 9 of 12 are missing). Labels live in fde._BUSINESS_CHECK_LABELS.
             expected_labels = [
-                "sponsor name", "metric M name", "metric baseline",
-                "metric target", "metric target date",
+                "metric baseline", "metric target", "metric target date",
                 "metric target differs from baseline",
                 ">=3 stakeholders named", "constraints documented",
                 "ROI value_per_unit", "ROI volume_per_year",
-                "ROI cost_ceiling_usd", "SLA p99_ms",
+                "ROI cost_ceiling_usd",
             ]
             for label in expected_labels:
                 self.assertIn(label, out,
                               f"missing-field label {label!r} absent "
                               f"from doctor output:\n{out}")
-            # BAD_RUN has 1 post-GA week with all three metrics breaching.
-            self.assertIn("weeks [1]", out)
+            # BAD_RUN has 4 post-GA weeks all breaching.
+            self.assertIn("weeks [1, 2, 3, 4]", out)
             self.assertIn("CUT", out)
         finally:
             os.unlink(path)
