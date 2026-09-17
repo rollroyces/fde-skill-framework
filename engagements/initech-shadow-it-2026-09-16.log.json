@@ -1,0 +1,55 @@
+{
+  "engagement": "initech-shadow-it-2026-09-16",
+  "discovery": {
+    "sponsor": "Mark Robinson, VP IT Operations (Initech)",
+    "metric": {
+      "name": "endpoint_threat_block_rate",
+      "baseline": null,
+      "target": null,
+      "date": ""
+    },
+    "sla": {
+      "p50_ms": 100,
+      "p95_ms": 350,
+      "p99_ms": 500,
+      "availability_pct": 99.9,
+      "error_budget_pct": 0.1
+    },
+    "constraints": [],
+    "stakeholders": [
+      "Mark Robinson (sponsor)",
+      "Sandra Park (FDE lead, daily contact)"
+    ],
+    "roi_inputs": {}
+  },
+  "post_ga_log": [
+    {
+      "week": 1,
+      "p99_ms": 1200,
+      "error_rate": 0.05,
+      "availability_pct": 97.0,
+      "metric_value": 18
+    },
+    {
+      "week": 2,
+      "p99_ms": 1300,
+      "error_rate": 0.04,
+      "availability_pct": 96.8,
+      "metric_value": 22
+    },
+    {
+      "week": 3,
+      "p99_ms": 1100,
+      "error_rate": 0.06,
+      "availability_pct": 97.5,
+      "metric_value": 19
+    },
+    {
+      "week": 4,
+      "p99_ms": 1250,
+      "error_rate": 0.05,
+      "availability_pct": 97.2,
+      "metric_value": 21
+    }
+  ]
+}
