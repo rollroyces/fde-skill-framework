@@ -235,10 +235,15 @@ def cmd_init(args: argparse.Namespace) -> int:
         customer=args.customer, date=today))
     print(f"wrote {out_path}")
     # Also drop a starter JSON log next to it so `fde score` works immediately.
+    # The JSON `engagement` field is set to the customer codename (matching
+    # the markdown's `# Engagement: <name>, <date>` header). The filename
+    # stem is the canonical unique key; the engagement id is the human
+    # codename and must match the markdown header so the consistency
+    # check in tests/test_engagement_consistency.py passes.
     log_path = out_dir / f"{args.customer}-{today}.log.json"
     if not log_path.exists() or args.force:
         log_path.write_text(json.dumps({
-            "engagement": f"{args.customer}-{today}",
+            "engagement": args.customer,
             "discovery": {
                 "sponsor": "",
                 "metric": {"name": "", "baseline": None,

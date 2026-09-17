@@ -67,7 +67,10 @@ class TestInit(unittest.TestCase):
             self.assertTrue(log.exists())
             self.assertIn("globex", md.read_text())
             log_data = json.loads(log.read_text())
-            self.assertEqual(log_data["engagement"], "globex-2026-09-16")
+            # JSON `engagement` is the human codename (matches the
+            # markdown `# Engagement: globex, 2026-09-16` header). The
+            # filename stem is the canonical unique key.
+            self.assertEqual(log_data["engagement"], "globex")
             self.assertEqual(log_data["post_ga_log"], [])
 
     def test_init_refuses_overwrite_without_force(self):

@@ -142,6 +142,12 @@ Value/cost = 10.8×. Above the 1.2× scale threshold.
   on GFP CDS (vs 412 baseline; +22%, beating the +16% target).
 - 2026-11-04: per-tissue weights extended to A549, HeLa. p99 stayed at 510ms.
 - 2026-12-15: GA, ROI evaluation appended below.
+- 2026-12-22: week 5 post-GA SLA snapshot — p99=505ms, error_rate=0.0009,
+  availability=99.95%, M=515 μg/mL (consistent with 22% lift).
+- 2027-01-05: week 6 post-GA SLA snapshot — p99=490ms, error_rate=0.0008,
+  availability=99.94%, M=509 μg/mL.
+- 2027-01-12: week 7 post-GA SLA snapshot — p99=510ms, error_rate=0.0009,
+  availability=99.92%, M=506 μg/mL.
 
 ---
 
