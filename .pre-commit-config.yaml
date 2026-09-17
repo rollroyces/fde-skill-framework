@@ -1,0 +1,23 @@
+# Pre-commit hooks for the FDE skill framework.
+#
+# Install:
+#     pip install pre-commit
+#     pre-commit install
+#
+# Then `git commit` will:
+#   1. Validate every staged engagements/*.log.json for schema correctness
+#      (catch malformed JSON, missing top-level keys, wrong types).
+#
+# Bypass for one-off commits: `git commit --no-verify`.
+#
+# Runs are local — no network calls, no LLM calls, completes in <100ms.
+repos:
+  - repo: local
+    hooks:
+      - id: fde-validate-engagement-logs
+        name: Validate engagements/*.log.json
+        entry: python scripts/pre_commit_validate.py
+        language: system
+        files: '^engagements/.*\.log\.json$'
+        pass_filenames: true
+        stages: [pre-commit]
