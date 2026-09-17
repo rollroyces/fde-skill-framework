@@ -643,6 +643,187 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------- #
+# stats — cross-engagement analytics
+# --------------------------------------------------------------------------- #
+
+def _collect_summaries(target: Path) -> list[dict]:
+    """Score every engagement under target, return compact summary list.
+
+    Same as cmd_list's row collection but exposed for stats to reuse.
+    Malformed logs are skipped (returned list may be shorter than the
+    number of files on disk).
+    """
+    if not target.is_dir():
+        return []
+    rows = []
+    for p in sorted(target.glob("*.log.json")):
+        summary = _score_engagement(p)
+        if summary is not None:
+            rows.append(summary)
+    return rows
+
+
+def _format_stats(rows: list[dict]) -> str:
+    """Aggregate stats across all engagements."""
+    if not rows:
+        return "(no engagement logs found)\n"
+
+    n = len(rows)
+    decisions = {"scale": 0, "iterate": 0, "cut": 0}
+    overall_sum = 0.0
+    overall_max = 0.0
+    overall_min = 100.0
+    weeks_total = 0
+    sponsors = set()
+    missing_discovery_total = 0
+
+    for r in rows:
+        decisions[r["decision"]] = decisions.get(r["decision"], 0) + 1
+        overall_sum += r["overall"]
+        overall_max = max(overall_max, r["overall"])
+        overall_min = min(overall_min, r["overall"])
+        weeks_total += r["weeks"]
+        if r["sponsor"]:
+            sponsors.add(r["sponsor"])
+
+    # Compute per-engagement missing-Discovery fields by re-loading
+    # the raw log (cheap; we already parsed it once for scoring).
+    missing_counter: dict[str, int] = {}
+    for r in rows:
+        try:
+            run = json.loads(Path(r["file"]).read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        missing = _missing_discovery_fields(run)
+        missing_discovery_total += len(missing)
+        for label in missing:
+            missing_counter[label] = missing_counter.get(label, 0) + 1
+
+    avg_overall = overall_sum / n if n else 0.0
+
+    lines = [
+        f"# Engagement fleet stats ({n} engagement{'s' if n != 1 else ''})\n",
+        f"  sponsors:      {len(sponsors)} unique",
+        f"  total weeks:   {weeks_total} (avg {weeks_total / n:.1f} per engagement)",
+        "",
+        "Decision distribution:",
+    ]
+    for d in ("scale", "iterate", "cut"):
+        count = decisions.get(d, 0)
+        pct = 100.0 * count / n if n else 0
+        lines.append(f"  {d:<8s} {count:>3d}  ({pct:5.1f}%)")
+
+    lines += [
+        "",
+        f"Overall score:  avg {avg_overall:.1f}   "
+        f"min {overall_min:.1f}   max {overall_max:.1f}",
+        f"Avg missing Discovery fields per engagement: "
+        f"{missing_discovery_total / n:.1f}",
+        "",
+    ]
+    if missing_counter:
+        lines.append("Most-common missing Discovery fields:")
+        # Sort by frequency descending, then alphabetically for stability.
+        for label, count in sorted(missing_counter.items(),
+                                    key=lambda kv: (-kv[1], kv[0])):
+            pct = 100.0 * count / n
+            lines.append(f"  {count:>3d}/{n}  ({pct:5.1f}%)  {label}")
+    else:
+        lines.append("No missing Discovery fields across the fleet.")
+
+    return "\n".join(lines) + "\n"
+
+
+def _missing_discovery_fields(run: dict) -> list[str]:
+    """Re-derive which Discovery fields are missing for a given run.
+
+    Mirrors the check labels in test_fde_eval.score_business so the
+    stats output uses the same human-readable labels that fde doctor
+    shows. Returns a list of label strings (one per missing field).
+    """
+    disc = run.get("discovery", {}) or {}
+    metric = disc.get("metric", {}) or {}
+    roi = disc.get("roi_inputs", {}) or {}
+    sla = disc.get("sla", {}) or {}
+    missing: list[str] = []
+
+    def _has(v: Any) -> bool:
+        if v is None:
+            return False
+        if isinstance(v, str):
+            return bool(v.strip())
+        if isinstance(v, (list, tuple, dict, set)):
+            return len(v) > 0
+        return True
+
+    def _is_num(v: Any) -> bool:
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+    if not _has(disc.get("sponsor")):
+        missing.append("sponsor name")
+    if not _has(metric.get("name")):
+        missing.append("metric M name")
+    if not _is_num(metric.get("baseline")):
+        missing.append("metric baseline")
+    if not _is_num(metric.get("target")):
+        missing.append("metric target")
+    if not _has(metric.get("date")):
+        missing.append("metric target date")
+    if not (_is_num(metric.get("target")) and _is_num(metric.get("baseline"))
+            and metric["target"] != metric["baseline"]):
+        missing.append("metric target differs from baseline")
+    if len(disc.get("stakeholders") or []) < 3:
+        missing.append(">=3 stakeholders named")
+    if not _has(disc.get("constraints")):
+        missing.append("constraints documented")
+    if not _is_num(roi.get("value_per_unit")):
+        missing.append("ROI value_per_unit")
+    if not _is_num(roi.get("volume_per_year")):
+        missing.append("ROI volume_per_year")
+    if not _is_num(roi.get("cost_ceiling_usd")):
+        missing.append("ROI cost_ceiling_usd")
+    if not _is_num(sla.get("p99_ms")):
+        missing.append("SLA p99_ms")
+    return missing
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    """Aggregate stats across all engagements under a directory."""
+    target = Path(args.dir)
+    if not target.is_dir():
+        print(f"error: not a directory: {target}", file=sys.stderr)
+        return 2
+    rows = _collect_summaries(target)
+    if args.json:
+        # Build a richer JSON payload than the markdown-style output.
+        n = len(rows)
+        decisions = {"scale": 0, "iterate": 0, "cut": 0}
+        for r in rows:
+            decisions[r["decision"]] = decisions.get(r["decision"], 0) + 1
+        missing_counter: dict[str, int] = {}
+        for r in rows:
+            try:
+                run = json.loads(Path(r["file"]).read_text())
+            except (json.JSONDecodeError, OSError):
+                continue
+            for label in _missing_discovery_fields(run):
+                missing_counter[label] = missing_counter.get(label, 0) + 1
+        payload = {
+            "engagement_count": n,
+            "decisions": decisions,
+            "weeks_total": sum(r["weeks"] for r in rows),
+            "overall_avg": (sum(r["overall"] for r in rows) / n) if n else 0,
+            "overall_min": min((r["overall"] for r in rows), default=0),
+            "overall_max": max((r["overall"] for r in rows), default=0),
+            "missing_field_counts": missing_counter,
+        }
+        print(json.dumps(payload, indent=2))
+    else:
+        print(_format_stats(rows))
+    return 0
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     today = args.date or date.today().isoformat()
     out_dir = Path(args.dir)
@@ -910,6 +1091,19 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Write a Markdown index to this path (e.g. "
                          "engagements/INDEX.md).")
     ls.set_defaults(func=cmd_list)
+
+    # stats
+    st_p = sub.add_parser(
+        "stats",
+        help="Aggregate stats across all engagements: decision "
+             "distribution, overall score range, most-common missing "
+             "Discovery fields.")
+    st_p.add_argument("--dir", default="engagements",
+                      help="Directory to scan for *.log.json (default: "
+                           "./engagements).")
+    st_p.add_argument("--json", action="store_true",
+                      help="Emit machine-readable JSON instead of text.")
+    st_p.set_defaults(func=cmd_stats)
 
     return p
 
